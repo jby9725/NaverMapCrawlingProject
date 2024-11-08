@@ -7,8 +7,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 
-### 여기에 상세페이지에서 오류가 나면 3번 시도하고 바로 다음으로 넘어가는 로직 있는지 확인하고 없으면 추가하세요.
-
 # ChromeDriver 경로 설정
 chrome_driver_path = "../driver/chromedriver.exe"
 
@@ -77,7 +75,14 @@ def collect_hospital_info():
     else:
         try:
             hours_element = driver.find_element(By.CSS_SELECTOR, "div.A_cdD em")
-            if hours_element.text in ["24시간 영업", "24시간 진료"]:
+            if hours_element.text == "24시간 영업":
+                is_24_hours = True
+        except:
+            pass
+
+        try:
+            hours_element = driver.find_element(By.CSS_SELECTOR, "div.A_cdD em")
+            if hours_element.text == "24시간 진료":
                 is_24_hours = True
         except:
             pass
@@ -89,6 +94,7 @@ def collect_hospital_info():
         except:
             pass
 
+    # 영업 시간 정보 설정
     hours = "24시간 영업" if is_24_hours else "영업 시간 정보 없음"
 
     return {
@@ -98,91 +104,100 @@ def collect_hospital_info():
         "영업 시간": hours
     }
 
-# 페이지네이션의 마지막 페이지 번호를 가져오는 함수
-def get_last_page_number():
-    page_elements = driver.find_elements(By.CSS_SELECTOR, "a.mBN2s")  # 모든 페이지 번호 요소
-    return int(page_elements[-1].text) if page_elements else 1
-
-# 특정 페이지로 이동하는 함수
-def go_to_page(page_number):
-    page_buttons = driver.find_elements(By.CSS_SELECTOR, "a.mBN2s")
-    for button in page_buttons:
-        if button.text == str(page_number):
-            button.click()
-            print(f"{page_number} 페이지로 이동 중...")
-            time.sleep(5)  # 페이지 전환 대기
-            return True
-    return False
-
-# 모든 병원 요소 수집 및 상세 정보 추출
-def collect_all_hospital_data():
-    # 스크롤을 통해 페이지의 모든 병원 요소를 불러옴
+# 1단계: 모든 병원 요소 수집 (스크롤 끝까지 수행)
+try:
+    switch_to_search_iframe()
     scrollable_area = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.ID, "_pcmap_list_scroll_container"))
     )
+
     hospital_elements = []
     scroll_position = 0
     scroll_increment = 200
     max_scroll_attempts = 70
+    scroll_attempts = 0
 
-    for _ in range(max_scroll_attempts):
+    while scroll_attempts < max_scroll_attempts:
+        # 현재 보이는 병원 정보 추가
         new_elements = driver.find_elements(By.CSS_SELECTOR, "li.VLTHu.OW9LQ")
         for element in new_elements:
+            # 'hTu5x' 클래스를 포함한 요소는 건너뛰기
             if "hTu5x" in element.get_attribute("class"):
+                print("건너뛰는 요소 발견: 특정 클래스 'hTu5x' 포함")
                 continue
+
             if element not in hospital_elements:
                 hospital_elements.append(element)
 
+        # 스크롤 내리기
         scroll_position += scroll_increment
         driver.execute_script("arguments[0].scrollTop = arguments[1];", scrollable_area, scroll_position)
         time.sleep(0.5)  # 스크롤 후 로딩 시간 대기
 
+        scroll_attempts += 1
+        print(f"스크롤 {scroll_attempts}회 실행, 현재 수집된 병원 개수: {len(hospital_elements)}")
+
     print(f"총 {len(hospital_elements)}개의 병원을 수집했습니다.")
 
-    # 각 병원의 상세 정보 추출
+    # 2단계: 수집된 각 병원의 상세 정보 추출
     detailed_data = []
-    for element in hospital_elements:
-        try:
-            name_element = element.find_element(By.CSS_SELECTOR, "span.YwYLL")
-            name = name_element.text
-            name_element.click()
-            switch_to_entry_iframe()
-            time.sleep(2)  # 상세 페이지 로딩 대기
-            hospital_info = collect_hospital_info()
-            detailed_data.append(hospital_info)
-            print(f"{hospital_info['병원 이름']} 병원의 상세 정보를 수집했습니다.")
-            switch_to_search_iframe()
-            time.sleep(2)
-        except Exception as e:
-            print(f"{name or '알 수 없는 이름'} 병원의 정보를 가져오는 중 오류가 발생했습니다:", e)
+    index = 0  # 현재 처리 중인 병원의 인덱스
 
-    return detailed_data
+    while index < len(hospital_elements):
+        element = hospital_elements[index]
+        retry_attempts = 0
+        name = None
 
-# 메인 크롤링 및 페이지 전환 루프
-try:
-    switch_to_search_iframe()
-    last_page_number = get_last_page_number()
-    print(f"마지막 페이지 번호: {last_page_number}")
+        while retry_attempts < 3:
+            try:
+                # 병원 이름을 클릭하여 상세 페이지로 이동
+                name_element = element.find_element(By.CSS_SELECTOR, "span.YwYLL")
+                name = name_element.text
+                name_element.click()
+                print(f"{name} 병원의 상세 페이지로 이동을 시도합니다.")
 
-    all_data = []
-    for current_page in range(1, last_page_number + 1):
-        print(f"{current_page} 페이지 크롤링 시작")
-        all_data.extend(collect_all_hospital_data())
-        if current_page < last_page_number:
-            go_to_page(current_page + 1)
+                # 상세 정보 iframe 로드 후 전환
+                switch_to_entry_iframe()
+                time.sleep(2)  # 상세 페이지 로딩 대기
+
+                # 병원 상세 정보 수집
+                hospital_info = collect_hospital_info()
+                detailed_data.append(hospital_info)
+                print(f"{hospital_info['병원 이름']} 병원의 상세 정보를 수집했습니다.")
+
+                # 검색 결과 iframe으로 돌아가기
+                switch_to_search_iframe()
+                print("검색 목록 페이지로 돌아왔습니다.")
+                time.sleep(2)  # 목록 페이지 로딩 대기
+                break  # 성공하면 재시도 루프 탈출
+
+            except Exception as e:
+                print(f"{name or '알 수 없는 이름'} 병원의 정보를 가져오는 중 오류가 발생했습니다:", e)
+                retry_attempts += 1  # 재시도 횟수 증가
+                if retry_attempts < 3:
+                    print(f"{name or '알 수 없는 이름'} 병원 정보 수집 재시도 {retry_attempts}회...")
+                    switch_to_search_iframe()  # 검색 결과로 돌아가서 재시도
+                    time.sleep(2)
+                    hospital_elements = driver.find_elements(By.CSS_SELECTOR, "li.VLTHu.OW9LQ")  # 목록 요소 새로 갱신
+                else:
+                    print(f"{name or '알 수 없는 이름'} 병원 정보를 3회 시도했지만 실패했습니다.")
+                    break  # 3회 실패 시 루프 탈출하고 다음 병원으로 이동
+
+        index += 1  # 다음 병원으로 이동
 
     # 수집된 병원 상세 정보 출력
     print("\n[전체 병원 상세 정보]")
-    for data in all_data:
+    for data in detailed_data:
         print(f"병원 이름: {data['병원 이름']}, 주소: {data['주소']}, 전화번호: {data['전화번호']}, 영업 시간: {data['영업 시간']}")
 
+    # 24시간 병원만 필터링하여 출력
     print("\n[24시간 운영 병원 목록]")
-    for data in all_data:
+    for data in detailed_data:
         if data["영업 시간"] == "24시간 영업":
             print(f"병원 이름: {data['병원 이름']}, 주소: {data['주소']}, 전화번호: {data['전화번호']}, 영업 시간: {data['영업 시간']}")
 
 except Exception as e:
-    print("페이지네이션을 확인하는 중 오류가 발생했습니다:", e)
+    print("검색 결과를 가져오는 중 오류가 발생했습니다:", e)
 
 # 드라이버 종료
 driver.quit()
