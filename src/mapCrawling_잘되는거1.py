@@ -6,7 +6,6 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
-import random
 
 # ChromeDriver 경로 설정
 chrome_driver_path = "../driver/chromedriver.exe"
@@ -113,14 +112,9 @@ def go_to_page(page_number):
             return True
     return False
 
-# 요청 제한 대응 로직
-def handle_too_many_requests():
-    wait_time = random.randint(60, 120)  # 1분에서 2분 사이 랜덤 대기
-    print(f"429 Too Many Requests 오류 발생. {wait_time}초 동안 대기합니다.")
-    time.sleep(wait_time)
-
 # 모든 병원 요소 수집 및 상세 정보 추출
 def collect_all_hospital_data():
+    # 스크롤을 통해 페이지의 모든 병원 요소를 불러옴
     scrollable_area = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.ID, "_pcmap_list_scroll_container"))
     )
@@ -129,45 +123,36 @@ def collect_all_hospital_data():
     scroll_increment = 200
     max_scroll_attempts = 70
 
-    # 스크롤하여 병원 요소 수집
     for _ in range(max_scroll_attempts):
         new_elements = driver.find_elements(By.CSS_SELECTOR, "li.VLTHu.OW9LQ")
         for element in new_elements:
-            if "hTu5x" in element.get_attribute("class"):  # 특정 클래스 건너뛰기
+            if "hTu5x" in element.get_attribute("class"):
                 continue
             if element not in hospital_elements:
                 hospital_elements.append(element)
 
         scroll_position += scroll_increment
         driver.execute_script("arguments[0].scrollTop = arguments[1];", scrollable_area, scroll_position)
-        time.sleep(0.5)
+        time.sleep(0.5)  # 스크롤 후 로딩 시간 대기
 
     print(f"총 {len(hospital_elements)}개의 병원을 수집했습니다.")
 
+    # 각 병원의 상세 정보 추출
     detailed_data = []
     for element in hospital_elements:
         try:
             name_element = element.find_element(By.CSS_SELECTOR, "span.YwYLL")
             name = name_element.text
-            print(f"{name} 병원 상세 정보 수집 시작")
-            name_element.click()  # 상세 페이지로 이동
-            switch_to_entry_iframe()  # 상세 페이지 iframe 전환
-            time.sleep(2)
-
-            hospital_info = collect_hospital_info()  # 상세 정보 수집
+            name_element.click()
+            switch_to_entry_iframe()
+            time.sleep(2)  # 상세 페이지 로딩 대기
+            hospital_info = collect_hospital_info()
             detailed_data.append(hospital_info)
             print(f"{hospital_info['병원 이름']} 병원의 상세 정보를 수집했습니다.")
+            switch_to_search_iframe()
             time.sleep(2)
-
-            switch_to_search_iframe()  # 검색 결과 iframe으로 돌아가기
         except Exception as e:
-            if "429" in str(e):
-                handle_too_many_requests()
-            else:
-                print(f"{name or '알 수 없는 이름'} 병원 정보 수집 중 오류 발생: {e}")
-                print(f"{name or '알 수 없는 이름'} 병원을 건너뛰고 다음으로 이동합니다.")
-                switch_to_search_iframe()
-            continue  # 다음 병원으로 이동
+            print(f"{name or '알 수 없는 이름'} 병원의 정보를 가져오는 중 오류가 발생했습니다:", e)
 
     return detailed_data
 
