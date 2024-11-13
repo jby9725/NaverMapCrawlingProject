@@ -15,7 +15,8 @@ chrome_driver_path = "../driver/chromedriver.exe"
 options = Options()
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
-options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36")
+options.add_argument(
+    "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36")
 
 # Chrome WebDriver 초기화
 service = Service(chrome_driver_path)
@@ -34,10 +35,12 @@ except Exception as e:
     driver.quit()
     exit()
 
+
 # 프레임 전환 함수 정의
 def switch_to_default_content():
     driver.switch_to.default_content()
     print("기본 프레임으로 전환했습니다.")
+
 
 def switch_to_search_iframe():
     driver.switch_to.default_content()
@@ -46,6 +49,7 @@ def switch_to_search_iframe():
     )
     driver.switch_to.frame(search_iframe)
     print("검색 결과 iframe으로 전환했습니다.")
+
 
 def switch_to_entry_iframe():
     driver.switch_to.default_content()
@@ -56,11 +60,13 @@ def switch_to_entry_iframe():
     time.sleep(1)
     print("상세 정보 iframe으로 전환했습니다.")
 
+
 # 병원 상세 정보 수집 함수 정의
 def collect_hospital_info():
     hospital_name = driver.find_element(By.CSS_SELECTOR, "span.GHAhO").text
     address = driver.find_element(By.CSS_SELECTOR, "span.LDgIH").text
-    phone = driver.find_element(By.CSS_SELECTOR, "span.xlx7Q").text if driver.find_elements(By.CSS_SELECTOR, "span.xlx7Q") else "전화번호 정보 없음"
+    phone = driver.find_element(By.CSS_SELECTOR, "span.xlx7Q").text if driver.find_elements(By.CSS_SELECTOR,
+                                                                                            "span.xlx7Q") else "전화번호 정보 없음"
 
     # 24시간 병원 판별 조건
     is_24_hours = False
@@ -90,10 +96,37 @@ def collect_hospital_info():
         "영업 시간": hours
     }
 
+
+# # 페이지네이션의 마지막 페이지 번호를 가져오는 함수
+# def get_last_page_number():
+#     page_elements = driver.find_elements(By.CSS_SELECTOR, "a.mBN2s")
+#     return int(page_elements[-1].text) if page_elements else 0
+
 # 페이지네이션의 마지막 페이지 번호를 가져오는 함수
 def get_last_page_number():
-    page_elements = driver.find_elements(By.CSS_SELECTOR, "a.mBN2s")
-    return int(page_elements[-1].text) if page_elements else 1
+    try:
+        # 검색 결과 iframe으로 전환
+        switch_to_search_iframe()
+
+        # 페이지 번호 요소 가져오기
+        page_elements = driver.find_elements(By.CSS_SELECTOR, "a.mBN2s")
+
+        # 페이지 번호 추출
+        if page_elements:
+            last_page = int(page_elements[-1].text)
+            print(f"마지막 페이지 번호: {last_page}")
+        else:
+            last_page = 1
+            print("페이지네이션이 없어 단일 페이지로 간주합니다.")
+    except Exception as e:
+        print(f"페이지네이션 확인 중 오류 발생: {e}")
+        last_page = 1
+    finally:
+        # 기본 프레임으로 복귀
+        switch_to_default_content()
+
+    return last_page
+
 
 # 특정 페이지로 이동하는 함수
 def go_to_page(page_number):
@@ -106,11 +139,13 @@ def go_to_page(page_number):
             return True
     return False
 
+
 # 요청 제한 대응 로직
 def handle_too_many_requests():
     wait_time = random.randint(60, 120)
     print(f"429 Too Many Requests 오류 발생. {wait_time}초 동안 대기합니다.")
     time.sleep(wait_time)
+
 
 # 모든 병원 요소 수집 및 상세 정보 추출
 def collect_all_hospital_data():
@@ -163,6 +198,7 @@ def collect_all_hospital_data():
             continue
     return detailed_data
 
+
 # 검색어 입력 및 검색
 def perform_search(keyword):
     try:
@@ -190,8 +226,12 @@ def perform_search(keyword):
         print(f"검색창 처리 중 오류 발생: {e}")
         raise
 
+
 # 키워드별 검색 실행
-search_keywords = ["대전 동구 동물병원", "대전 서구 동물병원", "대전 유성구 동물병원"]
+search_keywords = ["대전 서구 동물병원", "대전 동구 동물병원"]
+
+# 전체 병원 데이터를 저장할 리스트
+all_results = []
 
 for keyword in search_keywords:
     print(f"\n### '{keyword}' 검색 시작 ###")
@@ -200,23 +240,31 @@ for keyword in search_keywords:
         last_page_number = get_last_page_number()
         print(f"마지막 페이지 번호: {last_page_number}")
 
-        all_data = []
+        keyword_results = []
         for current_page in range(1, last_page_number + 1):
             print(f"{current_page} 페이지 크롤링 시작")
-            all_data.extend(collect_all_hospital_data())
+            keyword_results.extend(collect_all_hospital_data())
             if current_page < last_page_number:
                 go_to_page(current_page + 1)
 
-        print("\n[전체 병원 상세 정보]")
-        for data in all_data:
+        print(f"\n'{keyword}' 크롤링 결과:")
+        for data in keyword_results:
             print(f"병원 이름: {data['병원 이름']}, 주소: {data['주소']}, 전화번호: {data['전화번호']}, 영업 시간: {data['영업 시간']}")
 
-        print("\n[24시간 운영 병원 목록]")
-        for data in all_data:
-            if data["영업 시간"] == "24시간 영업":
-                print(f"병원 이름: {data['병원 이름']}, 주소: {data['주소']}, 전화번호: {data['전화번호']}, 영업 시간: {data['영업 시간']}")
+        all_results.extend(keyword_results)  # 전체 결과에 추가
+
     except Exception as e:
         print(f"'{keyword}' 검색 중 오류 발생: {e}")
+
+# 모든 검색어의 병원 데이터를 출력
+print("\n[전체 병원 상세 정보]")
+for data in all_results:
+    print(f"병원 이름: {data['병원 이름']}, 주소: {data['주소']}, 전화번호: {data['전화번호']}, 영업 시간: {data['영업 시간']}")
+
+print("\n[24시간 운영 병원 목록]")
+for data in all_results:
+    if data["영업 시간"] == "24시간 영업":
+        print(f"병원 이름: {data['병원 이름']}, 주소: {data['주소']}, 전화번호: {data['전화번호']}, 영업 시간: {data['영업 시간']}")
 
 # 드라이버 종료
 driver.quit()
