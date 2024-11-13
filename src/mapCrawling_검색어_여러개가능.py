@@ -53,7 +53,6 @@ def switch_to_entry_iframe():
         EC.presence_of_element_located((By.CSS_SELECTOR, "iframe#entryIframe"))
     )
     driver.switch_to.frame(entry_iframe)
-    time.sleep(1)
     print("상세 정보 iframe으로 전환했습니다.")
 
 # 병원 상세 정보 수집 함수 정의
@@ -191,30 +190,20 @@ def perform_search(keyword):
         raise
 
 # 키워드별 검색 실행
-search_keywords = ["대전 동구 동물병원", "대전 서구 동물병원", "대전 유성구 동물병원"]
+search_keywords = ["대전 동구 동물병원", "부산 동래구 동물병원", "대구 수성구 동물병원"]
 
 for keyword in search_keywords:
     print(f"\n### '{keyword}' 검색 시작 ###")
     try:
         perform_search(keyword)
+        # 페이지 크롤링 로직 호출
         last_page_number = get_last_page_number()
         print(f"마지막 페이지 번호: {last_page_number}")
-
-        all_data = []
         for current_page in range(1, last_page_number + 1):
             print(f"{current_page} 페이지 크롤링 시작")
-            all_data.extend(collect_all_hospital_data())
+            all_data = collect_all_hospital_data()
             if current_page < last_page_number:
                 go_to_page(current_page + 1)
-
-        print("\n[전체 병원 상세 정보]")
-        for data in all_data:
-            print(f"병원 이름: {data['병원 이름']}, 주소: {data['주소']}, 전화번호: {data['전화번호']}, 영업 시간: {data['영업 시간']}")
-
-        print("\n[24시간 운영 병원 목록]")
-        for data in all_data:
-            if data["영업 시간"] == "24시간 영업":
-                print(f"병원 이름: {data['병원 이름']}, 주소: {data['주소']}, 전화번호: {data['전화번호']}, 영업 시간: {data['영업 시간']}")
     except Exception as e:
         print(f"'{keyword}' 검색 중 오류 발생: {e}")
 
