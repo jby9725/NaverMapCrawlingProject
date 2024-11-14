@@ -7,7 +7,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
 import random
-import pymysql
 
 # ChromeDriver 경로 설정
 chrome_driver_path = "../driver/chromedriver.exe"
@@ -229,7 +228,7 @@ def perform_search(keyword):
 
 
 # 키워드별 검색 실행
-search_keywords = ["대전 동구 동물병원"]
+search_keywords = ["대전 서구 동물병원", "대전 동구 동물병원", "대전 중구 동물병원", "대전 유성구 동물병원", "대전 대덕구 동물병원" ]
 
 # 전체 병원 데이터를 저장할 리스트
 all_results = []
@@ -266,42 +265,6 @@ print("\n[24시간 운영 병원 목록]")
 for data in all_results:
     if data["영업 시간"] == "24시간 영업":
         print(f"병원 이름: {data['병원 이름']}, 주소: {data['주소']}, 전화번호: {data['전화번호']}, 영업 시간: {data['영업 시간']}")
-
-# DB 연결 설정
-connection = pymysql.connect(
-    host="localhost",       # DB 호스트
-    user="root",            # 사용자 이름
-    password="",    # 비밀번호
-    database="tails_route_test"  # 데이터베이스 이름
-)
-
-print("DB 연결 성공!")
-
-# temp_hospital에 24시간 병원 데이터 삽입
-try:
-    with connection.cursor() as cursor:
-        # 24시간 병원 데이터 필터링
-        for data in all_results:
-            if data["영업 시간"] == "24시간 영업":
-                # INSERT 쿼리 실행
-                query = """
-                    INSERT INTO temp_hospital (name, callNumber, address, type)
-                    VALUES (%s, %s, %s, %s)
-                """
-                cursor.execute(
-                    query,
-                    (
-                        data["병원 이름"],
-                        data["전화번호"],
-                        data["주소"],
-                        "24시간"
-                    )
-                )
-        # 변경사항 커밋
-        connection.commit()
-        print("24시간 병원 데이터가 temp_hospital 테이블에 성공적으로 삽입되었습니다.")
-finally:
-    connection.close()
 
 # 드라이버 종료
 driver.quit()

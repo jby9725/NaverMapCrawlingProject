@@ -20,3 +20,4 @@ try:
 finally:
     connection.close()  # 연결 종료
     print("DB 연결이 종료되었습니다.")
+
