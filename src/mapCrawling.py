@@ -8,6 +8,7 @@ from selenium.webdriver.support import expected_conditions as EC
 import time
 import random
 import pymysql
+import re
 
 # ChromeDriver 경로 설정
 chrome_driver_path = "../driver/chromedriver.exe"
@@ -64,10 +65,22 @@ def switch_to_entry_iframe():
 
 # 병원 상세 정보 수집 함수 정의
 def collect_hospital_info():
+    # 정규식 패턴 정의
+    road_address_pattern = re.compile(
+        r"(([가-힣]+(특별|광역)?(시|도)?)\s*[가-힣]+(구|군|시)\s*[가-힣0-9]+(로|길)\s*\d+(-\d+)?(\s*\([^)]+\))?)")
+
     hospital_name = driver.find_element(By.CSS_SELECTOR, "span.GHAhO").text
     address = driver.find_element(By.CSS_SELECTOR, "span.LDgIH").text
     phone = driver.find_element(By.CSS_SELECTOR, "span.xlx7Q").text if driver.find_elements(By.CSS_SELECTOR,
                                                                                             "span.xlx7Q") else "전화번호 정보 없음"
+    # 주소 분리 로직
+    road_address = None
+    jibun_address = None
+
+    if road_address_pattern.match(address):
+        road_address = address
+    else:
+        jibun_address = address
 
     # 24시간 병원 판별 조건
     is_24_hours = False
@@ -92,16 +105,12 @@ def collect_hospital_info():
 
     return {
         "병원 이름": hospital_name,
-        "주소": address,
+        "도로명 주소": road_address,
+        "지번 주소": jibun_address,
         "전화번호": phone,
         "영업 시간": hours
     }
 
-
-# # 페이지네이션의 마지막 페이지 번호를 가져오는 함수
-# def get_last_page_number():
-#     page_elements = driver.find_elements(By.CSS_SELECTOR, "a.mBN2s")
-#     return int(page_elements[-1].text) if page_elements else 0
 
 # 페이지네이션의 마지막 페이지 번호를 가져오는 함수
 def get_last_page_number():
@@ -164,14 +173,14 @@ def collect_all_hospital_data():
         for element in new_elements:
             # hTu5x 클래스 필터링 : 광고 필터링
             if "hTu5x" in element.get_attribute("class"):
-                print("hTu5x 발견. 건너뜁니다.")
+                # print("hTu5x 발견. 건너뜁니다.")
                 continue
 
             # YzBgS 클래스 필터링 : 태그가 동물병원이 아닌 것 거르기
             try:
                 hospital_type_span = element.find_element(By.CSS_SELECTOR, "span.YzBgS")
                 if hospital_type_span.text != "동물병원":
-                    print(f"{hospital_type_span.text} (동물병원이 아님) 발견. 건너뜁니다.")
+                    # print(f"{hospital_type_span.text} (동물병원이 아님) 발견. 건너뜁니다.")
                     continue
             except Exception as e:
                 print(f"YzBgS 클래스 span 처리 중 오류 발생: {e}")
@@ -242,7 +251,7 @@ def perform_search(keyword):
 
 
 # 키워드별 검색 실행
-search_keywords = ["대전 동구 동물병원" ]
+search_keywords = ["대전 동구 동물병원"]
 
 # 전체 병원 데이터를 저장할 리스트
 all_results = []
@@ -263,7 +272,8 @@ for keyword in search_keywords:
 
         print(f"\n'{keyword}' 크롤링 결과:")
         for data in keyword_results:
-            print(f"병원 이름: {data['병원 이름']}, 주소: {data['주소']}, 전화번호: {data['전화번호']}, 영업 시간: {data['영업 시간']}")
+            print(
+                f"병원 이름: {data['병원 이름']}, 도로명 주소: {data['도로명 주소'] or 'N/A'}, 지번 주소: {data['지번 주소'] or 'N/A'}, 전화번호: {data['전화번호']}, 영업 시간: {data['영업 시간']}")
 
         all_results.extend(keyword_results)  # 전체 결과에 추가
 
@@ -273,20 +283,32 @@ for keyword in search_keywords:
 # 모든 검색어의 병원 데이터를 출력
 print("\n[전체 병원 상세 정보]")
 for data in all_results:
-    print(f"병원 이름: {data['병원 이름']}, 주소: {data['주소']}, 전화번호: {data['전화번호']}, 영업 시간: {data['영업 시간']}")
+    print(
+        f"병원 이름: {data['병원 이름']}, "
+        f"도로명 주소: {data['도로명 주소'] or 'N/A'}, "
+        f"지번 주소: {data['지번 주소'] or 'N/A'}, "
+        f"전화번호: {data['전화번호']}, "
+        f"영업 시간: {data['영업 시간']}"
+    )
 
 print("\n[24시간 운영 병원 목록]")
 for data in all_results:
     if data["영업 시간"] == "24시간 영업":
-        print(f"병원 이름: {data['병원 이름']}, 주소: {data['주소']}, 전화번호: {data['전화번호']}, 영업 시간: {data['영업 시간']}")
+        print(
+            f"병원 이름: {data['병원 이름']}, "
+            f"도로명 주소: {data['도로명 주소'] or 'N/A'}, "
+            f"지번 주소: {data['지번 주소'] or 'N/A'}, "
+            f"전화번호: {data['전화번호']}, "
+            f"영업 시간: {data['영업 시간']}"
+        )
 
 ###############
 
 # DB 연결 설정
 connection = pymysql.connect(
-    host="localhost",       # DB 호스트
-    user="root",            # 사용자 이름
-    password="",    # 비밀번호
+    host="localhost",  # DB 호스트
+    user="root",  # 사용자 이름
+    password="",  # 비밀번호
     database="tails_route_test"  # 데이터베이스 이름
 )
 
@@ -300,23 +322,30 @@ try:
             if data["영업 시간"] == "24시간 영업":
                 # INSERT 쿼리 실행
                 query = """
-                    INSERT INTO temp_hospital (name, callNumber, address, type)
-                    VALUES (%s, %s, %s, %s)
+                    INSERT INTO temp_hospital (name, callNumber, roadAddress, jibunAddress, type)
+                    VALUES (%s, %s, %s, %s, %s)
                 """
                 cursor.execute(
                     query,
                     (
-                        data["병원 이름"],
-                        data["전화번호"],
-                        data["주소"],
+                        data.get("병원 이름", "N/A"),
+                        data.get("전화번호", None),
+                        data.get("도로명 주소", None),
+                        data.get("지번 주소", None),
                         "24시간"
                     )
                 )
         # 변경사항 커밋
         connection.commit()
         print("24시간 병원 데이터가 temp_hospital 테이블에 성공적으로 삽입되었습니다.")
+except pymysql.MySQLError as e:
+    print(f"DB 삽입 중 오류 발생: {e}")
+except Exception as e:
+    print(f"예기치 못한 오류 발생: {e}")
 finally:
-    connection.close()
+    if connection:
+        connection.close()
+        print("DB 연결이 종료되었습니다.")
 
 # 드라이버 종료
 driver.quit()
