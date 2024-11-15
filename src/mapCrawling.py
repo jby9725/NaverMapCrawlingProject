@@ -162,8 +162,21 @@ def collect_all_hospital_data():
     for _ in range(max_scroll_attempts):
         new_elements = driver.find_elements(By.CSS_SELECTOR, "li.VLTHu.OW9LQ")
         for element in new_elements:
+            # hTu5x 클래스 필터링 : 광고 필터링
             if "hTu5x" in element.get_attribute("class"):
+                print("hTu5x 발견. 건너뜁니다.")
                 continue
+
+            # YzBgS 클래스 필터링 : 태그가 동물병원이 아닌 것 거르기
+            try:
+                hospital_type_span = element.find_element(By.CSS_SELECTOR, "span.YzBgS")
+                if hospital_type_span.text != "동물병원":
+                    print(f"{hospital_type_span.text} (동물병원이 아님) 발견. 건너뜁니다.")
+                    continue
+            except Exception as e:
+                print(f"YzBgS 클래스 span 처리 중 오류 발생: {e}")
+                continue
+
             if element not in hospital_elements:
                 hospital_elements.append(element)
 
@@ -229,7 +242,7 @@ def perform_search(keyword):
 
 
 # 키워드별 검색 실행
-search_keywords = ["대전 동구 동물병원"]
+search_keywords = ["대전 동구 동물병원" ]
 
 # 전체 병원 데이터를 저장할 리스트
 all_results = []
@@ -266,6 +279,8 @@ print("\n[24시간 운영 병원 목록]")
 for data in all_results:
     if data["영업 시간"] == "24시간 영업":
         print(f"병원 이름: {data['병원 이름']}, 주소: {data['주소']}, 전화번호: {data['전화번호']}, 영업 시간: {data['영업 시간']}")
+
+###############
 
 # DB 연결 설정
 connection = pymysql.connect(
