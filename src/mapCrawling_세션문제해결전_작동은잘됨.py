@@ -18,26 +18,33 @@ options = Options()
 options.add_argument("--no-sandbox")
 options.add_argument("--disable-dev-shm-usage")
 options.add_argument(
-    "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36"
-)
+    "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36")
 
+# Chrome WebDriver 초기화
+service = Service(chrome_driver_path)
+driver = webdriver.Chrome(service=service, options=options)
 
-# 드라이버 재시작 함수 정의
-def restart_driver():
-    service = Service(chrome_driver_path)
-    driver = webdriver.Chrome(service=service, options=options)
-    driver.get("https://map.naver.com/v5/")
-    print("드라이버 재시작 및 네이버 지도 열기 완료")
-    return driver
+# 네이버 지도 열기
+driver.get("https://map.naver.com/v5/")
+print("페이지가 로드될 때까지 기다리겠습니다.")
+
+# 페이지가 완전히 로드될 때까지 기다림
+try:
+    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, "input.input_search")))
+    print("페이지가 로드되었습니다.")
+except Exception as e:
+    print("페이지가 로드되지 않았습니다:", e)
+    driver.quit()
+    exit()
 
 
 # 프레임 전환 함수 정의
-def switch_to_default_content(driver):
+def switch_to_default_content():
     driver.switch_to.default_content()
     print("기본 프레임으로 전환했습니다.")
 
 
-def switch_to_search_iframe(driver):
+def switch_to_search_iframe():
     driver.switch_to.default_content()
     search_iframe = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.CSS_SELECTOR, "iframe#searchIframe"))
@@ -46,7 +53,7 @@ def switch_to_search_iframe(driver):
     print("검색 결과 iframe으로 전환했습니다.")
 
 
-def switch_to_entry_iframe(driver):
+def switch_to_entry_iframe():
     driver.switch_to.default_content()
     entry_iframe = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.CSS_SELECTOR, "iframe#entryIframe"))
@@ -57,21 +64,43 @@ def switch_to_entry_iframe(driver):
 
 
 # 병원 상세 정보 수집 함수 정의
-def collect_hospital_info(driver):
+def collect_hospital_info():
+    # 정규식 패턴 정의
     road_address_pattern = re.compile(
-        r"(([가-힣]+(특별|광역)?(시|도)?)\s*[가-힣]+(구|군|시)\s*[가-힣0-9]+(로|길)\s*\d+(-\d+)?(\s*\([^)]+\))?)"
-    )
+        r"(([가-힣]+(특별|광역)?(시|도)?)\s*[가-힣]+(구|군|시)\s*[가-힣0-9]+(로|길)\s*\d+(-\d+)?(\s*\([^)]+\))?)")
+
     hospital_name = driver.find_element(By.CSS_SELECTOR, "span.GHAhO").text
     address = driver.find_element(By.CSS_SELECTOR, "span.LDgIH").text
     phone = driver.find_element(By.CSS_SELECTOR, "span.xlx7Q").text if driver.find_elements(By.CSS_SELECTOR,
                                                                                             "span.xlx7Q") else "전화번호 정보 없음"
+    # 주소 분리 로직
+    road_address = None
+    jibun_address = None
 
-    road_address = address if road_address_pattern.match(address) else None
-    jibun_address = address if not road_address else None
+    if road_address_pattern.match(address):
+        road_address = address
+    else:
+        jibun_address = address
 
+    # 24시간 병원 판별 조건
     is_24_hours = False
     if "24" in hospital_name or "24시" in hospital_name or "24시간" in hospital_name:
         is_24_hours = True
+    else:
+        try:
+            hours_element = driver.find_element(By.CSS_SELECTOR, "div.A_cdD em")
+            if hours_element.text in ["24시간 영업", "24시간 진료"]:
+                is_24_hours = True
+        except:
+            pass
+
+        try:
+            hours_text = driver.find_element(By.CSS_SELECTOR, "div.A_cdD").text
+            if "매일 00:00 - 24:00" in hours_text:
+                is_24_hours = True
+        except:
+            pass
+
     hours = "24시간 영업" if is_24_hours else "영업 시간 정보 없음"
 
     return {
@@ -83,76 +112,8 @@ def collect_hospital_info(driver):
     }
 
 
-# DB 저장 함수
-def save_to_db(all_results):
-    connection = pymysql.connect(
-        host="localhost",
-        user="root",
-        password="",
-        database="tails_route_test"
-    )
-    try:
-        with connection.cursor() as cursor:
-            for data in all_results:
-                query = """
-                    INSERT INTO temp_hospital (name, callNumber, roadAddress, jibunAddress, type)
-                    VALUES (%s, %s, %s, %s, %s)
-                """
-                cursor.execute(
-                    query,
-                    (
-                        data.get("병원 이름", "N/A"),
-                        data.get("전화번호", None),
-                        data.get("도로명 주소", None),
-                        data.get("지번 주소", None),
-                        "24시간"
-                    )
-                )
-            connection.commit()
-            print("DB에 성공적으로 저장되었습니다.")
-    finally:
-        connection.close()
-
-
-# 검색 및 크롤링 함수
-def perform_search_and_collect_data(keyword):
-    driver = restart_driver()
-    all_results = []
-    try:
-        # 검색어 입력
-        WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "input.input_search"))).send_keys(keyword + Keys.ENTER)
-        time.sleep(5)
-
-        # 페이지 크롤링
-        last_page_number = 1
-        try:
-            last_page_number = int(driver.find_elements(By.CSS_SELECTOR, "a.mBN2s")[-1].text)
-        except:
-            print("페이지네이션 없음. 단일 페이지 처리")
-
-        for page in range(1, last_page_number + 1):
-            # 병원 정보 수집
-            try:
-                elements = driver.find_elements(By.CSS_SELECTOR, "li.VLTHu.OW9LQ")
-                for element in elements:
-                    element.click()
-                    time.sleep(2)
-                    all_results.append(collect_hospital_info(driver))
-            except Exception as e:
-                print(f"페이지 크롤링 중 오류 발생: {e}")
-            if page < last_page_number:
-                driver.find_element(By.CSS_SELECTOR, f"a.mBN2s[data-page='{page + 1}']").click()
-                time.sleep(5)
-    except Exception as e:
-        print(f"검색 및 수집 중 오류 발생: {e}")
-    finally:
-        driver.quit()
-    return all_results
-
-
 # 페이지네이션의 마지막 페이지 번호를 가져오는 함수
-def get_last_page_number(driver):
+def get_last_page_number():
     try:
         # 검색 결과 iframe으로 전환
         switch_to_search_iframe()
@@ -178,7 +139,7 @@ def get_last_page_number(driver):
 
 
 # 특정 페이지로 이동하는 함수
-def go_to_page(driver, page_number):
+def go_to_page(page_number):
     page_buttons = driver.find_elements(By.CSS_SELECTOR, "a.mBN2s")
     for button in page_buttons:
         if button.text == str(page_number):
@@ -195,8 +156,9 @@ def handle_too_many_requests():
     print(f"429 Too Many Requests 오류 발생. {wait_time}초 동안 대기합니다.")
     time.sleep(wait_time)
 
+
 # 모든 병원 요소 수집 및 상세 정보 추출
-def collect_all_hospital_data(driver):
+def collect_all_hospital_data():
     switch_to_search_iframe()
     scrollable_area = WebDriverWait(driver, 10).until(
         EC.presence_of_element_located((By.ID, "_pcmap_list_scroll_container"))
@@ -259,8 +221,9 @@ def collect_all_hospital_data(driver):
             continue
     return detailed_data
 
+
 # 검색어 입력 및 검색
-def perform_search(driver, keyword):
+def perform_search(keyword):
     try:
         switch_to_default_content()  # 기본 프레임으로 전환
         search_box = WebDriverWait(driver, 20).until(
@@ -287,26 +250,102 @@ def perform_search(driver, keyword):
         raise
 
 
-
-# 검색어 리스트
+# 키워드별 검색 실행
 search_keywords = ["대전 유성구 동물병원", "대전 동구 동물병원", "대전 대덕구 동물병원", "대전 서구 동물병원", "대전 중구 동물병원"]
 
-# 성공적으로 완료된 키워드 저장
-completed_keywords = []
+# 전체 병원 데이터를 저장할 리스트
+all_results = []
 
-# 크롤링 시작
-total_results = []
 for keyword in search_keywords:
-    print(f"### '{keyword}' 검색 시작 ###")
-    results = perform_search_and_collect_data(keyword)
-    if results:  # 결과가 존재할 경우
-        completed_keywords.append(keyword)  # 성공한 키워드 저장
-    total_results.extend(results)
-    save_to_db(results)
+    print(f"\n### '{keyword}' 검색 시작 ###")
+    try:
+        perform_search(keyword)
+        last_page_number = get_last_page_number()
+        print(f"마지막 페이지 번호: {last_page_number}")
 
-# 작업 완료 메시지
-print("\n[작업 완료된 키워드]")
-for keyword in completed_keywords:
-    print(f"- {keyword}")
+        keyword_results = []
+        for current_page in range(1, last_page_number + 1):
+            print(f"{current_page} 페이지 크롤링 시작")
+            keyword_results.extend(collect_all_hospital_data())
+            if current_page < last_page_number:
+                go_to_page(current_page + 1)
 
-print("모든 작업이 완료되었습니다.")
+        print(f"\n'{keyword}' 크롤링 결과:")
+        for data in keyword_results:
+            print(
+                f"병원 이름: {data['병원 이름']}, 도로명 주소: {data['도로명 주소'] or 'N/A'}, 지번 주소: {data['지번 주소'] or 'N/A'}, 전화번호: {data['전화번호']}, 영업 시간: {data['영업 시간']}")
+
+        all_results.extend(keyword_results)  # 전체 결과에 추가
+
+    except Exception as e:
+        print(f"'{keyword}' 검색 중 오류 발생: {e}")
+
+# 모든 검색어의 병원 데이터를 출력
+print("\n[전체 병원 상세 정보]")
+for data in all_results:
+    print(
+        f"병원 이름: {data['병원 이름']}, "
+        f"도로명 주소: {data['도로명 주소'] or 'N/A'}, "
+        f"지번 주소: {data['지번 주소'] or 'N/A'}, "
+        f"전화번호: {data['전화번호']}, "
+        f"영업 시간: {data['영업 시간']}"
+    )
+
+print("\n[24시간 운영 병원 목록]")
+for data in all_results:
+    if data["영업 시간"] == "24시간 영업":
+        print(
+            f"병원 이름: {data['병원 이름']}, "
+            f"도로명 주소: {data['도로명 주소'] or 'N/A'}, "
+            f"지번 주소: {data['지번 주소'] or 'N/A'}, "
+            f"전화번호: {data['전화번호']}, "
+            f"영업 시간: {data['영업 시간']}"
+        )
+
+###############
+
+# DB 연결 설정
+connection = pymysql.connect(
+    host="localhost",  # DB 호스트
+    user="root",  # 사용자 이름
+    password="",  # 비밀번호
+    database="tails_route_test"  # 데이터베이스 이름
+)
+
+print("DB 연결 성공!")
+
+# temp_hospital에 24시간 병원 데이터 삽입
+try:
+    with connection.cursor() as cursor:
+        # 24시간 병원 데이터 필터링
+        for data in all_results:
+            if data["영업 시간"] == "24시간 영업":
+                # INSERT 쿼리 실행
+                query = """
+                    INSERT INTO temp_hospital (name, callNumber, roadAddress, jibunAddress, type)
+                    VALUES (%s, %s, %s, %s, %s)
+                """
+                cursor.execute(
+                    query,
+                    (
+                        data.get("병원 이름", "N/A"),
+                        data.get("전화번호", None),
+                        data.get("도로명 주소", None),
+                        data.get("지번 주소", None),
+                        "24시간"
+                    )
+                )
+        # 변경사항 커밋
+        connection.commit()
+        print("24시간 병원 데이터가 temp_hospital 테이블에 성공적으로 삽입되었습니다.")
+except pymysql.MySQLError as e:
+    print(f"DB 삽입 중 오류 발생: {e}")
+except Exception as e:
+    print(f"예기치 못한 오류 발생: {e}")
+finally:
+    if connection:
+        connection.close()
+        print("DB 연결이 종료되었습니다.")
+
+# 드라이버 종료
+driver.quit()
