@@ -17,15 +17,10 @@ chrome_driver_path = "../driver/chromedriver.exe"
 # 드라이버 초기화 함수
 def initialize_driver():
     options = Options()
-    options.add_argument("--no-sandbox")  # 리눅스 환경에서 권한 문제 방지
-    options.add_argument("--disable-dev-shm-usage")  # 메모리 사용 최적화
-    options.add_argument("--headless")  # Headless Mode 활성화 (화면 표시 X)
-    options.add_argument("--disable-gpu")  # GPU 비활성화 (리소스 절약)
-    options.add_argument("--window-size=1920,1080") # 브라우저 창의 크기를 고정
-    options.add_argument("--disable-blink-features=AutomationControlled") # "자동화된 브라우저"로 인식되지 않도록
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
     options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36"
-    )
+        "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36")
     service = Service(chrome_driver_path)
     driver = webdriver.Chrome(service=service, options=options)
     driver.get("https://map.naver.com/v5/")
@@ -258,7 +253,7 @@ def perform_search(driver, keyword):
 
 
 # 키워드별 검색 실행
-search_keywords = ["인천 24시 동물병원", "광주 24시 동물병원", "대전 24시 동물병원"]
+search_keywords = ["전남 동물병원"]
 
 # 전체 병원 데이터를 저장할 리스트
 all_results = []
@@ -277,8 +272,6 @@ for keyword in search_keywords:
             keyword_results.extend(collect_all_hospital_data(driver))
             if current_page < last_page_number:
                 go_to_page(driver, current_page + 1)
-
-        # driver.save_screenshot("screenshot.png") # 디버깅 용
 
         print(f"\n'{keyword}' 크롤링 결과:")
         for data in keyword_results:
