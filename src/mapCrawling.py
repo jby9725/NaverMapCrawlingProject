@@ -19,9 +19,9 @@ def initialize_driver():
     options = Options()
     options.add_argument("--no-sandbox")  # 리눅스 환경에서 권한 문제 방지
     options.add_argument("--disable-dev-shm-usage")  # 메모리 사용 최적화
-    options.add_argument("--headless")  # Headless Mode 활성화 (화면 표시 X)
+    # options.add_argument("--headless")  # Headless Mode 활성화 (화면 표시 X)
     options.add_argument("--disable-gpu")  # GPU 비활성화 (리소스 절약)
-    options.add_argument("--window-size=1920,1080")  # 브라우저 창의 크기를 고정
+    # options.add_argument("--window-size=1920,1080")  # 브라우저 창의 크기를 고정
     options.add_argument("--disable-blink-features=AutomationControlled")  # "자동화된 브라우저"로 인식되지 않도록
     options.add_argument(
         "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36"
@@ -78,16 +78,19 @@ def collect_hospital_info(driver):
 
     hospital_name = driver.find_element(By.CSS_SELECTOR, "span.GHAhO").text
     address = driver.find_element(By.CSS_SELECTOR, "span.LDgIH").text
-    phone = driver.find_element(By.CSS_SELECTOR, "span.xlx7Q").text if driver.find_elements(By.CSS_SELECTOR,
-                                                                                            "span.xlx7Q") else "전화번호 정보 없음"
+    phone = driver.find_element(By.CSS_SELECTOR, "span.xlx7Q").text if driver.find_elements(By.CSS_SELECTOR, "span.xlx7Q") else "전화번호 정보 없음"
+
+    # 주소 표준화 로직
+    standardized_address = standardize_address(address)
+
     # 주소 분리 로직
     road_address = None
     jibun_address = None
 
-    if road_address_pattern.match(address):
-        road_address = address
+    if road_address_pattern.match(standardized_address):
+        road_address = standardized_address
     else:
-        jibun_address = address
+        jibun_address = standardized_address
 
     # 24시간 병원 판별 조건
     is_24_hours = False
@@ -256,15 +259,47 @@ def perform_search(driver, keyword):
         print(f"검색창 처리 중 오류 발생: {e}")
         raise
 
+def standardize_address(address):
+    # 지역별 매핑 데이터
+    region_mapping = {
+        "서울": "서울특별시",
+        "부산": "부산광역시",
+        "대구": "대구광역시",
+        "인천": "인천광역시",
+        "광주": "광주광역시",
+        "대전": "대전광역시",
+        "울산": "울산광역시",
+        "세종": "세종특별자치시",
+        "경기": "경기도",
+        "강원": "강원도",
+        "충북": "충청북도",
+        "충남": "충청남도",
+        "전북": "전라북도",
+        "전남": "전라남도",
+        "경북": "경상북도",
+        "경남": "경상남도",
+        "제주": "제주특별자치도"
+    }
+
+    # 주소를 공백 기준으로 분리
+    address_parts = address.split()
+
+    # 첫 번째 부분을 지역 키워드로 매핑
+    if address_parts[0] in region_mapping:
+        address_parts[0] = region_mapping[address_parts[0]]
+
+    # 표준화된 주소 반환
+    return " ".join(address_parts)
+
 
 # 키워드별 검색 실행
 search_keywords = [
-    "서울 24시 동물병원", "부산 24시 동물병원", "대구 24시 동물병원",
-    "인천 24시 동물병원", "광주 24시 동물병원", "대전 24시 동물병원",
-    "울산 24시 동물병원", "세종 24시 동물병원", "경기 24시 동물병원",
-    "강원 24시 동물병원", "충북 24시 동물병원", "충남 24시 동물병원",
-    "전북 24시 동물병원", "전남 24시 동물병원", "경북 24시 동물병원",
-    "경남 24시 동물병원", "제주 24시 동물병원"
+    "서울 24시 동물병원",    "부산 24시 동물병원",    "대구 24시 동물병원",
+    "인천 24시 동물병원",    "광주 24시 동물병원",    "대전 24시 동물병원",
+    "울산 24시 동물병원",    "세종 동물병원",    "경기 24시 동물병원",
+    "강원 24시 동물병원",    "충북 24시 동물병원",    "충남 24시 동물병원",
+    "전북 24시 동물병원",    "전남 동물병원",    "경북 24시 동물병원",
+    "경남 24시 동물병원",    "제주 24시 동물병원"
 ]
 
 # 전체 병원 데이터를 저장할 리스트
@@ -318,7 +353,7 @@ connection = pymysql.connect(
     host="localhost",  # DB 호스트
     user="root",  # 사용자 이름
     password="",  # 비밀번호
-    database="tails_route_test"  # 데이터베이스 이름
+    database="tails_route"  # 데이터베이스 이름
 )
 
 print("DB 연결 성공!")
