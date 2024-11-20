@@ -21,8 +21,8 @@ def initialize_driver():
     options.add_argument("--disable-dev-shm-usage")  # 메모리 사용 최적화
     options.add_argument("--headless")  # Headless Mode 활성화 (화면 표시 X)
     options.add_argument("--disable-gpu")  # GPU 비활성화 (리소스 절약)
-    options.add_argument("--window-size=1920,1080")  # 브라우저 창의 크기를 고정
-    options.add_argument("--disable-blink-features=AutomationControlled")  # "자동화된 브라우저"로 인식되지 않도록
+    options.add_argument("--window-size=1920,1080") # 브라우저 창의 크기를 고정
+    options.add_argument("--disable-blink-features=AutomationControlled") # "자동화된 브라우저"로 인식되지 않도록
     options.add_argument(
         "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36"
     )
@@ -258,14 +258,7 @@ def perform_search(driver, keyword):
 
 
 # 키워드별 검색 실행
-search_keywords = [
-    "서울 24시 동물병원", "부산 24시 동물병원", "대구 24시 동물병원",
-    "인천 24시 동물병원", "광주 24시 동물병원", "대전 24시 동물병원",
-    "울산 24시 동물병원", "세종 24시 동물병원", "경기 24시 동물병원",
-    "강원 24시 동물병원", "충북 24시 동물병원", "충남 24시 동물병원",
-    "전북 24시 동물병원", "전남 24시 동물병원", "경북 24시 동물병원",
-    "경남 24시 동물병원", "제주 24시 동물병원"
-]
+search_keywords = ["인천 24시 동물병원", "광주 24시 동물병원", "대전 24시 동물병원"]
 
 # 전체 병원 데이터를 저장할 리스트
 all_results = []
@@ -299,7 +292,17 @@ for keyword in search_keywords:
     except Exception as e:
         print(f"'{keyword}' 검색 중 오류 발생: {e}")
 
-# 병원 데이터를 출력
+# 모든 검색어의 병원 데이터를 출력
+print("\n[전체 병원 상세 정보]")
+for data in all_results:
+    print(
+        f"병원 이름: {data['병원 이름']}, "
+        f"도로명 주소: {data['도로명 주소'] or 'N/A'}, "
+        f"지번 주소: {data['지번 주소'] or 'N/A'}, "
+        f"전화번호: {data['전화번호']}, "
+        f"영업 시간: {data['영업 시간']}"
+    )
+
 print("\n[24시간 운영 병원 목록]")
 for data in all_results:
     if data["영업 시간"] == "24시간 영업":
@@ -323,35 +326,30 @@ connection = pymysql.connect(
 
 print("DB 연결 성공!")
 
-# temp_hospital에 데이터를 삽입 또는 업데이트
+# temp_hospital에 24시간 병원 데이터 삽입
 try:
     with connection.cursor() as cursor:
-        # 데이터 삽입 및 업데이트 쿼리
-        query = """
-            INSERT INTO temp_hospital (name, callNumber, roadAddress, jibunAddress, type)
-            VALUES (%s, %s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE
-                name = VALUES(name),
-                roadAddress = VALUES(roadAddress),
-                jibunAddress = VALUES(jibunAddress),
-                type = VALUES(type);
-        """
-        # 크롤링된 데이터를 삽입 및 업데이트
+        # 24시간 병원 데이터 필터링
         for data in all_results:
-            cursor.execute(
-                query,
-                (
-                    data.get("병원 이름", "N/A"),
-                    data.get("전화번호", None),
-                    data.get("도로명 주소", None),
-                    data.get("지번 주소", None),
-                    "24시간"
+            if data["영업 시간"] == "24시간 영업":
+                # INSERT 쿼리 실행
+                query = """
+                    INSERT INTO temp_hospital (name, callNumber, roadAddress, jibunAddress, type)
+                    VALUES (%s, %s, %s, %s, %s)
+                """
+                cursor.execute(
+                    query,
+                    (
+                        data.get("병원 이름", "N/A"),
+                        data.get("전화번호", None),
+                        data.get("도로명 주소", None),
+                        data.get("지번 주소", None),
+                        "24시간"
+                    )
                 )
-            )
-
         # 변경사항 커밋
         connection.commit()
-        print("24시간 병원 데이터 삽입 및 업데이트가 완료되었습니다.")
+        print("24시간 병원 데이터가 temp_hospital 테이블에 성공적으로 삽입되었습니다.")
 except pymysql.MySQLError as e:
     print(f"DB 삽입 중 오류 발생: {e}")
 except Exception as e:
