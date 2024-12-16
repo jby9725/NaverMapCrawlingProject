@@ -19,9 +19,9 @@ def initialize_driver():
     options = Options()
     options.add_argument("--no-sandbox")  # 리눅스 환경에서 권한 문제 방지
     options.add_argument("--disable-dev-shm-usage")  # 메모리 사용 최적화
-    # options.add_argument("--headless")  # Headless Mode 활성화 (화면 표시 X)
+    options.add_argument("--headless")  # Headless Mode 활성화 (화면 표시 X)
     options.add_argument("--disable-gpu")  # GPU 비활성화 (리소스 절약)
-    # options.add_argument("--window-size=1920,1080")  # 브라우저 창의 크기를 고정
+    options.add_argument("--window-size=1920,1080")  # 브라우저 창의 크기를 고정
     options.add_argument("--disable-blink-features=AutomationControlled")  # "자동화된 브라우저"로 인식되지 않도록
     options.add_argument(
         "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.83 Safari/537.36"
@@ -90,7 +90,7 @@ def collect_hospital_info(driver):
     if road_address_pattern.match(standardized_address):
         road_address = standardized_address
     else:
-        jibun_address = standardized_address
+        road_address = standardized_address # 그냥 다 도로명으로 넣어버리고 소수의 지번 주소는 버리자.
 
     # 24시간 병원 판별 조건
     is_24_hours = False
@@ -296,9 +296,9 @@ def standardize_address(address):
 search_keywords = [
     "서울 24시 동물병원",    "부산 24시 동물병원",    "대구 24시 동물병원",
     "인천 24시 동물병원",    "광주 24시 동물병원",    "대전 24시 동물병원",
-    "울산 24시 동물병원",    "세종 동물병원",    "경기 24시 동물병원",
+    "울산 24시 동물병원",    "세종 24시 동물병원",    "경기 24시 동물병원",
     "강원 24시 동물병원",    "충북 24시 동물병원",    "충남 24시 동물병원",
-    "전북 24시 동물병원",    "전남 동물병원",    "경북 24시 동물병원",
+    "전북 24시 동물병원",    "전남 24시 동물병원",    "경북 24시 동물병원",
     "경남 24시 동물병원",    "제주 24시 동물병원"
 ]
 
@@ -353,7 +353,7 @@ connection = pymysql.connect(
     host="localhost",  # DB 호스트
     user="root",  # 사용자 이름
     password="",  # 비밀번호
-    database="tails_route"  # 데이터베이스 이름
+    database="tails_route_test"  # 데이터베이스 이름
 )
 
 print("DB 연결 성공!")
